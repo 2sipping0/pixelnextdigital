@@ -1,6 +1,8 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import type React from "react"
+
+import { useEffect, useState, useRef, type FormEvent } from "react"
 import Image from "next/image"
 import Link from "next/link"
 import { motion } from "framer-motion"
@@ -9,23 +11,59 @@ import {
   Briefcase,
   Check,
   ChevronDown,
+  ChevronUp,
   Code,
+  CreditCard,
+  Facebook,
   Globe,
   Instagram,
   Mail,
   MessageSquare,
-  MessageSquareQuote,
   Phone,
+  Quote,
+  Shield,
   Smartphone,
   Twitter,
   Users,
+  X,
+  CheckCircle,
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
+import { StripePaymentWrapper } from "@/components/payment/StripePaymentForm"
+import { CryptoPaymentForm } from "@/components/payment/CryptoPaymentForm"
+import { sendConfirmationEmail } from "./actions/send-confirmation-email"
 
 export default function Home() {
   const currentYear = new Date().getFullYear()
   const [currentSlide, setCurrentSlide] = useState(0)
+  const [activeQuestion, setActiveQuestion] = useState<number | null>(null)
+  const [showOrderForm, setShowOrderForm] = useState(false)
+  const [formStep, setFormStep] = useState(1)
+  const [formData, setFormData] = useState({
+    businessName: "",
+    email: "",
+    phone: "",
+    socialMedia: {
+      facebook: "",
+      instagram: "",
+      twitter: "",
+    },
+    websiteDetails: "",
+    selectedPlan: "",
+    paymentMethod: "",
+  })
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [orderSuccess, setOrderSuccess] = useState(false)
+  const [orderDetails, setOrderDetails] = useState<{
+    orderId: string
+    orderDate: string
+    totalAmount: string
+  } | null>(null)
+  const [menuOpen, setMenuOpen] = useState(false)
+  const [cryptoPaymentUrl, setCryptoPaymentUrl] = useState<string | null>(null)
+
+  const menuRef = useRef<HTMLDivElement>(null)
 
   const projects = [
     {
@@ -60,6 +98,200 @@ export default function Home() {
     },
   ]
 
+  const faqs = [
+    {
+      question: "How long does it take to build a website?",
+      answer:
+        "Our typical timeline is 1-2 weeks for basic websites, 3-4 weeks for professional websites, and 5-6 weeks for e-commerce websites. The exact timeline depends on the complexity of your project and how quickly you provide feedback and content.",
+    },
+    {
+      question: "Do I need to provide my own content?",
+      answer:
+        "Yes, you'll need to provide the content for your website, including text and images. However, we can help with basic content structuring and can recommend professional copywriters and photographers if needed. We also have access to stock photos that can be used on your website.",
+    },
+    {
+      question: "Will my website work on mobile devices?",
+      answer:
+        "All our websites are fully responsive, meaning they automatically adjust to look great on all devices - smartphones, tablets, laptops, and desktop computers. Mobile-friendliness is not just a feature but a standard part of our development process.",
+    },
+    {
+      question: "Do you offer website maintenance services?",
+      answer:
+        "Yes, we offer free monthly maintenance for the first 6 months to keep your website secure, updated, and running smoothly. Our maintenance includes regular backups, security updates, performance optimization, and minor content updates. We can discuss maintenance options after your website is completed.",
+    },
+    {
+      question: "Can I update the website myself after it's built?",
+      answer:
+        "Yes, our Professional and E-commerce packages include a content management system (CMS) that allows you to easily update content yourself without any technical knowledge. We'll provide training on how to use the CMS to make updates to your website.",
+    },
+    {
+      question: "What payment methods do you accept?",
+      answer:
+        "We accept payments via credit card through Stripe and various cryptocurrencies through Coinbase Commerce.",
+    },
+  ]
+
+  const handleOrderClick = (plan: string) => {
+    setFormData({ ...formData, selectedPlan: plan })
+    setShowOrderForm(true)
+    setFormStep(1)
+    setOrderSuccess(false)
+    setOrderDetails(null)
+    setCryptoPaymentUrl(null)
+    // Scroll to the form
+    setTimeout(() => {
+      document.getElementById("order-form")?.scrollIntoView({ behavior: "smooth" })
+    }, 100)
+  }
+
+  const generateOrderId = () => {
+    return `PND-${Date.now().toString().slice(-6)}-${Math.floor(Math.random() * 1000)}`
+  }
+
+  const formatDate = (date: Date) => {
+    return new Intl.DateTimeFormat("en-US", {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+      hour: "numeric",
+      minute: "numeric",
+      hour12: true,
+    }).format(date)
+  }
+
+  const getPlanAmount = (plan: string) => {
+    switch (plan) {
+      case "Basic":
+        return "$300"
+      case "Professional":
+        return "$900"
+      case "E-commerce":
+        return "$2,700"
+      default:
+        return "$0"
+    }
+  }
+
+  const handleFormSubmit = async (e: FormEvent) => {
+    e.preventDefault()
+
+    if (formStep < 3) {
+      setFormStep(formStep + 1)
+    } else {
+      // For the final step, we don't submit the form here
+      // Payment processing is handled by the payment components
+    }
+  }
+
+  const handlePaymentSuccess = async (paymentId: string) => {
+    try {
+      // Generate order details
+      const orderId = orderDetails?.orderId || generateOrderId()
+      const orderDate = orderDetails?.orderDate || formatDate(new Date())
+      const totalAmount = orderDetails?.totalAmount || getPlanAmount(formData.selectedPlan)
+
+      // Save order details for display if not already set
+      if (!orderDetails) {
+        setOrderDetails({
+          orderId,
+          orderDate,
+          totalAmount,
+        })
+      }
+
+      // Send confirmation email
+      await sendConfirmationEmail({
+        ...formData,
+        orderId,
+        orderDate,
+        totalAmount,
+      })
+
+      // Show success state
+      setOrderSuccess(true)
+
+      // Reset form after 10 seconds
+      setTimeout(() => {
+        setShowOrderForm(false)
+        setFormStep(1)
+        setFormData({
+          businessName: "",
+          email: "",
+          phone: "",
+          socialMedia: {
+            facebook: "",
+            instagram: "",
+            twitter: "",
+          },
+          websiteDetails: "",
+          selectedPlan: "",
+          paymentMethod: "",
+        })
+        setCryptoPaymentUrl(null)
+      }, 10000)
+    } catch (error) {
+      console.error("Error processing order:", error)
+      alert("There was an error processing your order. Please try again.")
+    }
+  }
+
+  const handleCryptoPaymentSuccess = (chargeId: string, hostedUrl: string) => {
+    // For crypto payments, we'll redirect to the Coinbase Commerce hosted checkout
+    setCryptoPaymentUrl(hostedUrl)
+
+    // Generate order details if not already set
+    if (!orderDetails) {
+      setOrderDetails({
+        orderId: generateOrderId(),
+        orderDate: formatDate(new Date()),
+        totalAmount: getPlanAmount(formData.selectedPlan),
+      })
+    }
+  }
+
+  const handlePaymentError = (error: string) => {
+    console.error("Payment error:", error)
+    alert(`Payment error: ${error}`)
+  }
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    const { name, value } = e.target
+
+    if (name.includes(".")) {
+      const [parent, child] = name.split(".")
+      setFormData({
+        ...formData,
+        [parent]: {
+          ...(formData[parent as keyof typeof formData] as Record<string, string>),
+          [child]: value,
+        },
+      })
+    } else {
+      setFormData({
+        ...formData,
+        [name]: value,
+      })
+    }
+  }
+
+  const toggleMenu = () => {
+    setMenuOpen(!menuOpen)
+  }
+
+  // Close menu when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setMenuOpen(false)
+      }
+    }
+
+    document.addEventListener("mousedown", handleClickOutside)
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside)
+    }
+  }, [])
+
   useEffect(() => {
     const interval = setInterval(() => {
       setCurrentSlide((prev) => (prev + 1) % projects.length)
@@ -80,12 +312,19 @@ export default function Home() {
           </div>
           <div className="flex flex-1 items-center justify-end space-x-4">
             <div className="flex flex-1 items-center justify-end space-x-4">
-              <div className="relative group">
-                <button className="flex items-center space-x-2 rounded-md px-3 py-2 bg-peach-200 text-peach-600 hover:bg-peach-300 transition-colors">
+              <div className="relative group" ref={menuRef}>
+                <button
+                  className="flex items-center space-x-2 rounded-md px-3 py-2 bg-peach-200 text-peach-600 hover:bg-peach-300 transition-colors"
+                  onClick={toggleMenu}
+                >
                   <span>Menu</span>
-                  <ChevronDown className="h-4 w-4" />
+                  {menuOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
                 </button>
-                <div className="absolute right-0 mt-2 w-48 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50">
+                <div
+                  className={`absolute right-0 mt-2 w-48 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 transition-all duration-200 z-50 ${
+                    menuOpen ? "opacity-100 visible" : "opacity-0 invisible"
+                  }`}
+                >
                   <div className="py-1">
                     <a
                       href="#services"
@@ -93,6 +332,7 @@ export default function Home() {
                       onClick={(e) => {
                         e.preventDefault()
                         document.getElementById("services")?.scrollIntoView({ behavior: "smooth" })
+                        setMenuOpen(false)
                       }}
                     >
                       <Globe className="h-4 w-4 text-peach-500 mr-2" />
@@ -104,6 +344,7 @@ export default function Home() {
                       onClick={(e) => {
                         e.preventDefault()
                         document.getElementById("work")?.scrollIntoView({ behavior: "smooth" })
+                        setMenuOpen(false)
                       }}
                     >
                       <Briefcase className="h-4 w-4 text-peach-500 mr-2" />
@@ -115,9 +356,10 @@ export default function Home() {
                       onClick={(e) => {
                         e.preventDefault()
                         document.getElementById("testimonials")?.scrollIntoView({ behavior: "smooth" })
+                        setMenuOpen(false)
                       }}
                     >
-                      <MessageSquareQuote className="h-4 w-4 text-peach-500 mr-2" />
+                      <Quote className="h-4 w-4 text-peach-500 mr-2" />
                       <span>Testimonials</span>
                     </a>
                     <a
@@ -126,10 +368,23 @@ export default function Home() {
                       onClick={(e) => {
                         e.preventDefault()
                         document.getElementById("pricing")?.scrollIntoView({ behavior: "smooth" })
+                        setMenuOpen(false)
                       }}
                     >
                       <Check className="h-4 w-4 text-peach-500 mr-2" />
                       <span>Pricing</span>
+                    </a>
+                    <a
+                      href="#faq"
+                      className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-peach-50"
+                      onClick={(e) => {
+                        e.preventDefault()
+                        document.getElementById("faq")?.scrollIntoView({ behavior: "smooth" })
+                        setMenuOpen(false)
+                      }}
+                    >
+                      <MessageSquare className="h-4 w-4 text-peach-500 mr-2" />
+                      <span>FAQ</span>
                     </a>
                     <a
                       href="#contact"
@@ -137,6 +392,7 @@ export default function Home() {
                       onClick={(e) => {
                         e.preventDefault()
                         document.getElementById("contact")?.scrollIntoView({ behavior: "smooth" })
+                        setMenuOpen(false)
                       }}
                     >
                       <Mail className="h-4 w-4 text-peach-500 mr-2" />
@@ -149,6 +405,7 @@ export default function Home() {
           </div>
         </div>
       </header>
+
       <main className="flex-1">
         <section className="relative w-full py-12 md:py-24 lg:py-32 xl:py-48 overflow-hidden">
           {/* Hero background image overlay */}
@@ -189,28 +446,25 @@ export default function Home() {
                   We create beautiful, functional websites that help small businesses grow online.
                 </p>
               </div>
-              <div className="space-x-4">
+              <div className="flex flex-col sm:flex-row gap-4 sm:gap-6 mt-4">
                 <Button
-                  asChild
-                  className="bg-peach-500 hover:bg-peach-600"
+                  className="bg-peach-500 hover:bg-peach-600 w-full sm:w-auto justify-center"
                   onClick={(e) => {
                     e.preventDefault()
-                    document.getElementById("contact")?.scrollIntoView({ behavior: "smooth" })
+                    document.getElementById("pricing")?.scrollIntoView({ behavior: "smooth" })
                   }}
                 >
-                  <Link href="#contact">
-                    Get Started <ArrowRight className="ml-2 h-4 w-4" />
-                  </Link>
+                  Get Started <ArrowRight className="ml-2 h-4 w-4" />
                 </Button>
                 <Button
                   variant="outline"
-                  asChild
+                  className="w-full sm:w-auto justify-center"
                   onClick={(e) => {
                     e.preventDefault()
                     document.getElementById("work")?.scrollIntoView({ behavior: "smooth" })
                   }}
                 >
-                  <Link href="#work">View Our Work</Link>
+                  View Our Work
                 </Button>
               </div>
             </motion.div>
@@ -451,12 +705,12 @@ export default function Home() {
                 viewport={{ once: true }}
                 className="grid grid-cols-1 gap-6 md:grid-cols-3"
               >
-                <div className="rounded-lg border bg-white p-6 shadow-sm">
+                <div className="rounded-lg border bg-white p-4 sm:p-5 md:p-6 shadow-sm transition-all duration-300 hover:shadow-md">
                   <div className="flex flex-col space-y-2">
                     <h3 className="text-xl font-bold">Basic</h3>
                     <p className="text-sm text-gray-500">Perfect for small businesses just getting started</p>
                     <div className="flex items-baseline">
-                      <span className="text-3xl font-bold">$300</span>
+                      <span className="text-2xl md:text-3xl font-bold">$300</span>
                       <span className="ml-1 text-sm text-gray-500">one-time</span>
                     </div>
                   </div>
@@ -478,9 +732,15 @@ export default function Home() {
                       <span className="text-sm">Basic SEO setup</span>
                     </li>
                   </ul>
-                  <Button className="mt-6 w-full bg-peach-500 hover:bg-peach-600">Get Started</Button>
+                  <Button
+                    className="mt-6 w-full bg-peach-500 hover:bg-peach-600 text-xs sm:text-sm md:text-base py-2 md:py-3 flex items-center justify-center gap-2 transition-all duration-300 transform hover:scale-105"
+                    onClick={() => handleOrderClick("Basic")}
+                  >
+                    Get Started
+                    <ArrowRight className="h-3 w-3 sm:h-4 sm:w-4" />
+                  </Button>
                 </div>
-                <div className="rounded-lg border bg-white p-6 shadow-lg relative">
+                <div className="rounded-lg border bg-white p-4 sm:p-5 md:p-6 shadow-lg relative transition-all duration-300 hover:shadow-xl">
                   <div className="absolute -top-4 left-0 right-0 mx-auto w-fit rounded-full bg-peach-500 px-3 py-1 text-xs font-semibold text-white">
                     Popular
                   </div>
@@ -488,7 +748,7 @@ export default function Home() {
                     <h3 className="text-xl font-bold">Professional</h3>
                     <p className="text-sm text-gray-500">For established businesses looking to grow</p>
                     <div className="flex items-baseline">
-                      <span className="text-3xl font-bold">$900</span>
+                      <span className="text-2xl md:text-3xl font-bold">$900</span>
                       <span className="ml-1 text-sm text-gray-500">one-time</span>
                     </div>
                   </div>
@@ -514,14 +774,21 @@ export default function Home() {
                       <span className="text-sm">Social media integration</span>
                     </li>
                   </ul>
-                  <Button className="mt-6 w-full bg-peach-500 hover:bg-peach-600">Get Started</Button>
+                  <Button
+                    className="mt-6 w-full bg-peach-500 hover:bg-peach-600 text-xs sm:text-sm md:text-base py-2 md:py-3 flex items-center justify-center gap-2 transition-all duration-300 transform hover:scale-105 relative overflow-hidden group"
+                    onClick={() => handleOrderClick("Professional")}
+                  >
+                    <span className="relative z-10">Get Started</span>
+                    <ArrowRight className="h-3 w-3 sm:h-4 sm:w-4 relative z-10 transition-transform group-hover:translate-x-1" />
+                    <span className="absolute inset-0 bg-peach-600 transform scale-x-0 group-hover:scale-x-100 transition-transform origin-left"></span>
+                  </Button>
                 </div>
-                <div className="rounded-lg border bg-white p-6 shadow-sm">
+                <div className="rounded-lg border bg-white p-4 sm:p-5 md:p-6 shadow-sm transition-all duration-300 hover:shadow-md">
                   <div className="flex flex-col space-y-2">
                     <h3 className="text-xl font-bold">E-commerce</h3>
                     <p className="text-sm text-gray-500">For businesses selling products online</p>
                     <div className="flex items-baseline">
-                      <span className="text-3xl font-bold">$2,700</span>
+                      <span className="text-2xl md:text-3xl font-bold">$2,700</span>
                       <span className="ml-1 text-sm text-gray-500">one-time</span>
                     </div>
                   </div>
@@ -547,14 +814,452 @@ export default function Home() {
                       <span className="text-sm">Marketing integrations</span>
                     </li>
                   </ul>
-                  <Button className="mt-6 w-full bg-peach-500 hover:bg-peach-600">Get Started</Button>
+                  <Button
+                    className="mt-6 w-full bg-peach-500 hover:bg-peach-600 text-xs sm:text-sm md:text-base py-2 md:py-3 flex items-center justify-center gap-2 transition-all duration-300 transform hover:scale-105"
+                    onClick={() => handleOrderClick("E-commerce")}
+                  >
+                    Get Started
+                    <ArrowRight className="h-3 w-3 sm:h-4 sm:w-4" />
+                  </Button>
                 </div>
               </motion.div>
+            </div>
+
+            {showOrderForm && (
+              <div
+                id="order-form"
+                className="mx-auto max-w-3xl mt-12 bg-white rounded-lg shadow-lg p-6 border border-peach-200"
+              >
+                {orderSuccess ? (
+                  <div className="text-center py-8">
+                    <div className="flex justify-center mb-4">
+                      <div className="rounded-full bg-green-100 p-3">
+                        <CheckCircle className="h-12 w-12 text-green-500" />
+                      </div>
+                    </div>
+                    <h3 className="text-2xl font-bold text-gray-800 mb-2">Order Confirmed!</h3>
+                    <p className="text-gray-600 mb-6">
+                      Thank you for your order. A confirmation email has been sent to{" "}
+                      <span className="font-medium">{formData.email}</span>
+                    </p>
+
+                    <div className="bg-gray-50 p-6 rounded-lg mb-6 text-left max-w-md mx-auto">
+                      <h4 className="font-semibold text-lg mb-4 text-peach-600">Order Details</h4>
+                      <div className="space-y-2">
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">Order ID:</span>
+                          <span className="font-medium">{orderDetails?.orderId}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">Date:</span>
+                          <span className="font-medium">{orderDetails?.orderDate}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">Package:</span>
+                          <span className="font-medium">{formData.selectedPlan}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">Total:</span>
+                          <span className="font-bold text-peach-600">{orderDetails?.totalAmount}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <p className="text-gray-600 mb-6">
+                      Our team will contact you within 24 hours to discuss your project in detail.
+                    </p>
+
+                    <Button
+                      onClick={() => setShowOrderForm(false)}
+                      className="bg-peach-500 hover:bg-peach-600 text-white"
+                    >
+                      Close
+                    </Button>
+                  </div>
+                ) : cryptoPaymentUrl ? (
+                  <div className="text-center py-8">
+                    <div className="flex justify-center mb-4">
+                      <div className="rounded-full bg-peach-100 p-3">
+                        <Shield className="h-12 w-12 text-peach-500" />
+                      </div>
+                    </div>
+                    <h3 className="text-2xl font-bold text-gray-800 mb-2">Complete Your Crypto Payment</h3>
+                    <p className="text-gray-600 mb-6">
+                      You'll be redirected to Coinbase Commerce to complete your payment securely.
+                    </p>
+
+                    <div className="bg-gray-50 p-6 rounded-lg mb-6 text-left max-w-md mx-auto">
+                      <h4 className="font-semibold text-lg mb-4 text-peach-600">Order Details</h4>
+                      <div className="space-y-2">
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">Order ID:</span>
+                          <span className="font-medium">{orderDetails?.orderId}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">Package:</span>
+                          <span className="font-medium">{formData.selectedPlan}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">Total:</span>
+                          <span className="font-bold text-peach-600">{orderDetails?.totalAmount}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-col sm:flex-row gap-4 justify-center">
+                      <Button
+                        onClick={() => window.open(cryptoPaymentUrl, "_blank")}
+                        className="bg-peach-500 hover:bg-peach-600 text-white"
+                      >
+                        Proceed to Payment
+                      </Button>
+                      <Button variant="outline" onClick={() => setCryptoPaymentUrl(null)}>
+                        Go Back
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <div className="flex justify-between items-center mb-6">
+                      <h3 className="text-2xl font-bold text-gray-800">Order {formData.selectedPlan} Package</h3>
+                      <button
+                        onClick={() => setShowOrderForm(false)}
+                        className="text-gray-500 hover:text-gray-700 transition-colors"
+                        aria-label="Close form"
+                      >
+                        <X className="h-6 w-6" />
+                      </button>
+                    </div>
+
+                    <div className="mb-6">
+                      <div className="flex items-center mb-4">
+                        <div className="w-8 h-8 rounded-full bg-peach-500 flex items-center justify-center text-white font-bold mr-3">
+                          {formStep}
+                        </div>
+                        <div className="flex-1 h-2 bg-gray-200 rounded-full">
+                          <div
+                            className="h-2 bg-peach-500 rounded-full transition-all duration-300"
+                            style={{ width: `${(formStep / 3) * 100}%` }}
+                          ></div>
+                        </div>
+                      </div>
+                      <p className="text-sm text-gray-500">
+                        {formStep === 1 && "Step 1: Business Information"}
+                        {formStep === 2 && "Step 2: Website Details"}
+                        {formStep === 3 && "Step 3: Payment Method"}
+                      </p>
+                    </div>
+
+                    <form onSubmit={handleFormSubmit}>
+                      {formStep === 1 && (
+                        <div className="space-y-4">
+                          <div>
+                            <label htmlFor="businessName" className="block text-sm font-medium text-gray-700 mb-1">
+                              Business Name *
+                            </label>
+                            <input
+                              type="text"
+                              id="businessName"
+                              name="businessName"
+                              value={formData.businessName}
+                              onChange={handleInputChange}
+                              required
+                              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-peach-500"
+                              placeholder="Your Business Name"
+                            />
+                          </div>
+                          <div>
+                            <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
+                              Email Address *
+                            </label>
+                            <input
+                              type="email"
+                              id="email"
+                              name="email"
+                              value={formData.email}
+                              onChange={handleInputChange}
+                              required
+                              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-peach-500"
+                              placeholder="you@example.com"
+                            />
+                          </div>
+                          <div>
+                            <label htmlFor="phone" className="block text-sm font-medium text-gray-700 mb-1">
+                              Phone Number *
+                            </label>
+                            <input
+                              type="tel"
+                              id="phone"
+                              name="phone"
+                              value={formData.phone}
+                              onChange={handleInputChange}
+                              required
+                              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-peach-500"
+                              placeholder="(123) 456-7890"
+                            />
+                          </div>
+                        </div>
+                      )}
+
+                      {formStep === 2 && (
+                        <div className="space-y-4">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Social Media Pages (Optional)
+                            </label>
+                            <div className="space-y-3">
+                              <div className="flex items-center">
+                                <Facebook className="h-5 w-5 text-blue-600 mr-2" />
+                                <input
+                                  type="text"
+                                  name="socialMedia.facebook"
+                                  value={formData.socialMedia.facebook}
+                                  onChange={handleInputChange}
+                                  className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-peach-500"
+                                  placeholder="Facebook URL"
+                                />
+                              </div>
+                              <div className="flex items-center">
+                                <Instagram className="h-5 w-5 text-pink-600 mr-2" />
+                                <input
+                                  type="text"
+                                  name="socialMedia.instagram"
+                                  value={formData.socialMedia.instagram}
+                                  onChange={handleInputChange}
+                                  className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-peach-500"
+                                  placeholder="Instagram URL"
+                                />
+                              </div>
+                              <div className="flex items-center">
+                                <Twitter className="h-5 w-5 text-blue-400 mr-2" />
+                                <input
+                                  type="text"
+                                  name="socialMedia.twitter"
+                                  value={formData.socialMedia.twitter}
+                                  onChange={handleInputChange}
+                                  className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-peach-500"
+                                  placeholder="Twitter URL"
+                                />
+                              </div>
+                            </div>
+                          </div>
+                          <div>
+                            <label htmlFor="websiteDetails" className="block text-sm font-medium text-gray-700 mb-1">
+                              Website Details *
+                            </label>
+                            <textarea
+                              id="websiteDetails"
+                              name="websiteDetails"
+                              value={formData.websiteDetails}
+                              onChange={handleInputChange}
+                              required
+                              rows={5}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-peach-500"
+                              placeholder="Please describe your business and what you'd like to achieve with your new website. Include any specific features or pages you need."
+                            ></textarea>
+                          </div>
+                        </div>
+                      )}
+
+                      {formStep === 3 && (
+                        <div className="space-y-4">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-3">
+                              Select Payment Method *
+                            </label>
+                            <div className="space-y-3">
+                              <label className="flex items-center p-4 border border-gray-300 rounded-md cursor-pointer hover:bg-peach-50 transition-colors">
+                                <input
+                                  type="radio"
+                                  name="paymentMethod"
+                                  value="stripe"
+                                  checked={formData.paymentMethod === "stripe"}
+                                  onChange={handleInputChange}
+                                  required
+                                  className="h-4 w-4 text-peach-500 focus:ring-peach-500 border-gray-300"
+                                />
+                                <span className="ml-2 flex items-center">
+                                  <CreditCard className="h-5 w-5 text-peach-500 mr-2" />
+                                  Pay with Card (Stripe)
+                                </span>
+                              </label>
+                              <label className="flex items-center p-4 border border-gray-300 rounded-md cursor-pointer hover:bg-peach-50 transition-colors">
+                                <input
+                                  type="radio"
+                                  name="paymentMethod"
+                                  value="crypto"
+                                  checked={formData.paymentMethod === "crypto"}
+                                  onChange={handleInputChange}
+                                  required
+                                  className="h-4 w-4 text-peach-500 focus:ring-peach-500 border-gray-300"
+                                />
+                                <span className="ml-2 flex items-center">
+                                  <Shield className="h-5 w-5 text-peach-500 mr-2" />
+                                  Pay with Crypto
+                                  <span className="ml-2 text-xs bg-green-100 text-green-800 px-2 py-0.5 rounded-full">
+                                    More Secured
+                                  </span>
+                                </span>
+                              </label>
+                            </div>
+                          </div>
+
+                          <div className="bg-gray-50 p-4 rounded-md">
+                            <div className="flex justify-between mb-2">
+                              <span className="text-gray-600">Package:</span>
+                              <span className="font-medium">{formData.selectedPlan}</span>
+                            </div>
+                            <div className="flex justify-between mb-2">
+                              <span className="text-gray-600">Price:</span>
+                              <span className="font-medium">
+                                {formData.selectedPlan === "Basic" && "$300"}
+                                {formData.selectedPlan === "Professional" && "$900"}
+                                {formData.selectedPlan === "E-commerce" && "$2,700"}
+                              </span>
+                            </div>
+                            <div className="border-t border-gray-200 my-2 pt-2">
+                              <div className="flex justify-between">
+                                <span className="font-medium">Total:</span>
+                                <span className="font-bold text-peach-600">
+                                  {formData.selectedPlan === "Basic" && "$300"}
+                                  {formData.selectedPlan === "Professional" && "$900"}
+                                  {formData.selectedPlan === "E-commerce" && "$2,700"}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+
+                          {formData.paymentMethod === "stripe" && (
+                            <div className="mt-4">
+                              <StripePaymentWrapper
+                                orderDetails={{
+                                  ...formData,
+                                  orderId: orderDetails?.orderId || generateOrderId(),
+                                  orderDate: orderDetails?.orderDate || formatDate(new Date()),
+                                  totalAmount: orderDetails?.totalAmount || getPlanAmount(formData.selectedPlan),
+                                }}
+                                onSuccess={handlePaymentSuccess}
+                                onError={handlePaymentError}
+                              />
+                            </div>
+                          )}
+
+                          {formData.paymentMethod === "crypto" && (
+                            <div className="mt-4">
+                              <CryptoPaymentForm
+                                orderDetails={{
+                                  ...formData,
+                                  orderId: orderDetails?.orderId || generateOrderId(),
+                                  orderDate: orderDetails?.orderDate || formatDate(new Date()),
+                                  totalAmount: orderDetails?.totalAmount || getPlanAmount(formData.selectedPlan),
+                                }}
+                                onSuccess={handleCryptoPaymentSuccess}
+                                onError={handlePaymentError}
+                              />
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      <div className="mt-8 flex justify-between">
+                        {formStep > 1 && (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => setFormStep(formStep - 1)}
+                            className="px-4 py-2"
+                          >
+                            Back
+                          </Button>
+                        )}
+                        {formStep < 3 ? (
+                          <Button
+                            type="submit"
+                            className="bg-peach-500 hover:bg-peach-600 text-white px-4 py-2 ml-auto"
+                          >
+                            Continue
+                          </Button>
+                        ) : (
+                          formData.paymentMethod === "" && (
+                            <Button
+                              type="button"
+                              className="bg-peach-500 hover:bg-peach-600 text-white px-4 py-2 ml-auto"
+                              disabled={true}
+                            >
+                              Select a Payment Method
+                            </Button>
+                          )
+                        )}
+                      </div>
+                    </form>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+        </section>
+
+        <section id="faq" className="w-full py-12 md:py-24 lg:py-32 bg-peach-50">
+          <div className="container px-4 md:px-6">
+            <motion.div
+              initial={{ opacity: 0 }}
+              whileInView={{ opacity: 1 }}
+              transition={{ duration: 0.5 }}
+              viewport={{ once: true }}
+              className="flex flex-col items-center justify-center space-y-4 text-center"
+            >
+              <div className="space-y-2">
+                <h2 className="text-3xl font-bold tracking-tighter sm:text-5xl">Frequently Asked Questions</h2>
+                <p className="mx-auto max-w-[700px] text-gray-500 md:text-xl/relaxed lg:text-base/relaxed xl:text-xl/relaxed dark:text-gray-400">
+                  Find answers to common questions about our web development services.
+                </p>
+              </div>
+            </motion.div>
+            <div className="mx-auto max-w-3xl py-12">
+              <div className="space-y-4">
+                {faqs.map((faq, index) => (
+                  <motion.div
+                    key={index}
+                    initial={{ opacity: 0, y: 20 }}
+                    whileInView={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.5, delay: index * 0.1 }}
+                    viewport={{ once: true }}
+                    className="rounded-lg border bg-white overflow-hidden"
+                  >
+                    <button
+                      className="flex w-full items-center justify-between px-4 py-3 text-left"
+                      onClick={() => setActiveQuestion(activeQuestion === index ? null : index)}
+                    >
+                      <h3 className="font-medium text-gray-900">{faq.question}</h3>
+                      {activeQuestion === index ? (
+                        <ChevronUp className="h-5 w-5 text-gray-500" />
+                      ) : (
+                        <ChevronDown className="h-5 w-5 text-gray-500" />
+                      )}
+                    </button>
+                    <div className={`px-4 pb-4 ${activeQuestion === index ? "block" : "hidden"}`}>
+                      <p className="text-gray-600">{faq.answer}</p>
+                    </div>
+                  </motion.div>
+                ))}
+              </div>
+              <div className="mt-8 text-center">
+                <p className="text-gray-600 mb-4">Still have questions?</p>
+                <Button
+                  className="bg-peach-500 hover:bg-peach-600 px-6"
+                  onClick={(e) => {
+                    e.preventDefault()
+                    document.getElementById("contact")?.scrollIntoView({ behavior: "smooth" })
+                  }}
+                >
+                  Contact Us <ArrowRight className="ml-2 h-4 w-4" />
+                </Button>
+              </div>
             </div>
           </div>
         </section>
 
-        <section id="contact" className="w-full py-12 md:py-24 lg:py-32 bg-peach-50">
+        <section id="contact" className="w-full py-12 md:py-24 lg:py-32">
           <div className="container px-4 md:px-6">
             <motion.div
               initial={{ opacity: 0 }}
