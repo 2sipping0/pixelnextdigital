@@ -1,11 +1,106 @@
+"use client"
+
+import { useEffect, useState } from "react"
+import { useParams, useRouter } from "next/navigation"
+import Link from "next/link"
 import { getOrderById } from "@/lib/supabase"
-import { notFound } from "next/navigation"
 
-export default async function OrderDetailPage({ params }: { params: { id: string } }) {
-  const { success, data: order } = await getOrderById(params.id)
+export default function OrderDetailPage() {
+  const params = useParams()
+  const router = useRouter()
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [order, setOrder] = useState<any | null>(null)
 
-  if (!success || !order) {
-    notFound()
+  useEffect(() => {
+    async function fetchOrder() {
+      if (!params.id) {
+        router.push("/admin/orders")
+        return
+      }
+
+      try {
+        const { success, data, error } = await getOrderById(params.id as string)
+
+        if (error?.message?.includes("Supabase URL and Anon Key are required")) {
+          setError("Supabase configuration missing")
+          setLoading(false)
+          return
+        }
+
+        if (!success || !data) {
+          setError("Order not found")
+          setLoading(false)
+          return
+        }
+
+        setOrder(data)
+        setLoading(false)
+      } catch (err) {
+        console.error("Error fetching order:", err)
+        setError("An error occurred while loading the order")
+        setLoading(false)
+      }
+    }
+
+    fetchOrder()
+  }, [params.id, router])
+
+  // Show loading state
+  if (loading) {
+    return (
+      <div className="bg-white p-6 rounded-lg shadow-lg">
+        <h1 className="text-2xl font-bold mb-4">Order Details</h1>
+        <div className="flex items-center justify-center p-8">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-peach-500"></div>
+          <span className="ml-2">Loading order details...</span>
+        </div>
+      </div>
+    )
+  }
+
+  // Show error state for Supabase configuration issues
+  if (error === "Supabase configuration missing") {
+    return (
+      <div className="bg-white p-6 rounded-lg shadow-lg">
+        <h1 className="text-2xl font-bold mb-4">Order Details</h1>
+        <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-6">
+          <p className="text-yellow-700">
+            Supabase configuration is missing. Please add the required environment variables.
+          </p>
+        </div>
+        <Link href="/admin/orders" className="text-peach-600 hover:text-peach-900">
+          Back to Orders
+        </Link>
+      </div>
+    )
+  }
+
+  // Show error state
+  if (error) {
+    return (
+      <div className="bg-white p-6 rounded-lg shadow-lg">
+        <h1 className="text-2xl font-bold mb-4">Order Details</h1>
+        <div className="bg-red-50 border-l-4 border-red-400 p-4 mb-6">
+          <p className="text-red-700">{error}</p>
+        </div>
+        <Link href="/admin/orders" className="text-peach-600 hover:text-peach-900">
+          Back to Orders
+        </Link>
+      </div>
+    )
+  }
+
+  if (!order) {
+    return (
+      <div className="bg-white p-6 rounded-lg shadow-lg">
+        <h1 className="text-2xl font-bold mb-4">Order Details</h1>
+        <p className="text-gray-600 mb-4">Order not found</p>
+        <Link href="/admin/orders" className="text-peach-600 hover:text-peach-900">
+          Back to Orders
+        </Link>
+      </div>
+    )
   }
 
   return (
@@ -110,6 +205,12 @@ export default async function OrderDetailPage({ params }: { params: { id: string
         <div className="p-6">
           <p className="text-sm text-gray-900 whitespace-pre-line">{order.website_details}</p>
         </div>
+      </div>
+
+      <div className="mt-6">
+        <Link href="/admin/orders" className="text-peach-600 hover:text-peach-900">
+          Back to Orders
+        </Link>
       </div>
     </div>
   )

@@ -1,8 +1,82 @@
+"use client"
+
+import { useEffect, useState } from "react"
 import Link from "next/link"
 import { getOrders } from "@/lib/supabase"
 
-export default async function AdminDashboard() {
-  const { success, data: orders } = await getOrders()
+export default function AdminDashboard() {
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [orders, setOrders] = useState<any[] | null>(null)
+
+  useEffect(() => {
+    async function fetchOrders() {
+      try {
+        const { success, data, error } = await getOrders()
+
+        if (error?.message?.includes("Supabase URL and Anon Key are required")) {
+          setError("Supabase configuration missing")
+          setLoading(false)
+          return
+        }
+
+        if (!success) {
+          setError("Failed to load orders")
+          setLoading(false)
+          return
+        }
+
+        setOrders(data || [])
+        setLoading(false)
+      } catch (err) {
+        console.error("Error fetching orders:", err)
+        setError("An error occurred while loading orders")
+        setLoading(false)
+      }
+    }
+
+    fetchOrders()
+  }, [])
+
+  // Show loading state
+  if (loading) {
+    return (
+      <div className="bg-white p-6 rounded-lg shadow-lg">
+        <h1 className="text-2xl font-bold mb-4">Admin Dashboard</h1>
+        <div className="flex items-center justify-center p-8">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-peach-500"></div>
+          <span className="ml-2">Loading orders...</span>
+        </div>
+      </div>
+    )
+  }
+
+  // Show error state for Supabase configuration issues
+  if (error === "Supabase configuration missing") {
+    return (
+      <div className="bg-white p-6 rounded-lg shadow-lg">
+        <h1 className="text-2xl font-bold mb-4">Admin Dashboard</h1>
+        <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-6">
+          <p className="text-yellow-700">
+            Supabase configuration is missing. Please add the required environment variables.
+          </p>
+        </div>
+        <p>The admin dashboard requires Supabase to be properly configured. Please check your environment variables.</p>
+      </div>
+    )
+  }
+
+  // Show error state
+  if (error) {
+    return (
+      <div className="bg-white p-6 rounded-lg shadow-lg">
+        <h1 className="text-2xl font-bold mb-4">Admin Dashboard</h1>
+        <div className="bg-red-50 border-l-4 border-red-400 p-4">
+          <p className="text-red-700">{error}</p>
+        </div>
+      </div>
+    )
+  }
 
   // Calculate statistics
   const totalOrders = orders?.length || 0
@@ -11,7 +85,10 @@ export default async function AdminDashboard() {
   const totalRevenue =
     orders
       ?.filter((order) => order.status === "paid")
-      .reduce((sum, order) => sum + Number.parseFloat(order.total_amount.replace("$", "")), 0) || 0
+      .reduce((sum, order) => {
+        const amount = order.total_amount.replace(/[^0-9.]/g, "")
+        return sum + Number.parseFloat(amount || "0")
+      }, 0) || 0
 
   return (
     <div>
@@ -64,7 +141,7 @@ export default async function AdminDashboard() {
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {success && orders && orders.length > 0 ? (
+              {orders && orders.length > 0 ? (
                 orders.slice(0, 5).map((order) => (
                   <tr key={order.id}>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{order.order_id}</td>
@@ -98,7 +175,7 @@ export default async function AdminDashboard() {
               ) : (
                 <tr>
                   <td colSpan={7} className="px-6 py-4 text-center text-sm text-gray-500">
-                    {success ? "No orders found" : "Failed to load orders"}
+                    No orders found
                   </td>
                 </tr>
               )}

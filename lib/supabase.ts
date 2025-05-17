@@ -68,6 +68,17 @@ export async function saveOrderToDatabase(orderData: any) {
 
 export async function getOrders() {
   try {
+    // Check if Supabase is configured
+    if (!supabaseUrl || !supabaseAnonKey) {
+      return {
+        success: false,
+        data: null,
+        error: new Error(
+          "Supabase URL and Anon Key are required. Please check your environment variables: NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY",
+        ),
+      }
+    }
+
     const supabase = getSupabaseClient()
     const { data, error } = await supabase
       .from("orders")
@@ -87,6 +98,17 @@ export async function getOrders() {
 
 export async function getOrderById(id: string) {
   try {
+    // Check if Supabase is configured
+    if (!supabaseUrl || !supabaseAnonKey) {
+      return {
+        success: false,
+        data: null,
+        error: new Error(
+          "Supabase URL and Anon Key are required. Please check your environment variables: NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY",
+        ),
+      }
+    }
+
     const supabase = getSupabaseClient()
     const { data, error } = await supabase
       .from("orders")
@@ -147,6 +169,16 @@ export async function savePaymentDetails(paymentData: any) {
 // Admin authentication
 export async function signInAdmin(email: string, password: string) {
   try {
+    // Check if Supabase is configured
+    if (!supabaseUrl || !supabaseAnonKey) {
+      return {
+        success: false,
+        error: new Error(
+          "Supabase URL and Anon Key are required. Please check your environment variables: NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY",
+        ),
+      }
+    }
+
     const supabase = getSupabaseClient()
     const { data, error } = await supabase.auth.signInWithPassword({
       email,
@@ -163,6 +195,16 @@ export async function signInAdmin(email: string, password: string) {
 
 export async function signOutAdmin() {
   try {
+    // Check if Supabase is configured
+    if (!supabaseUrl || !supabaseAnonKey) {
+      return {
+        success: false,
+        error: new Error(
+          "Supabase URL and Anon Key are required. Please check your environment variables: NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY",
+        ),
+      }
+    }
+
     const supabase = getSupabaseClient()
     const { error } = await supabase.auth.signOut()
     if (error) throw error
@@ -175,12 +217,24 @@ export async function signOutAdmin() {
 
 export async function getAdminSession() {
   try {
+    // Check if Supabase is configured
+    if (!supabaseUrl || !supabaseAnonKey) {
+      return {
+        success: false,
+        session: null,
+        error: new Error(
+          "Supabase URL and Anon Key are required. Please check your environment variables: NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY",
+        ),
+      }
+    }
+
     const supabase = getSupabaseClient()
     const { data, error } = await supabase.auth.getSession()
+
     if (error) throw error
     return { success: true, session: data.session }
   } catch (error) {
     console.error("Error getting session:", error)
-    return { success: false, error }
+    return { success: false, session: null, error }
   }
 }
